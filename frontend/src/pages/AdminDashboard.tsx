@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getApplications, getStats, getBudget, setBudget } from "../api";
+import { getApplications, getStats, getBudget, setBudget, updateApplication } from "../api";
 import type { Application, Budget } from "../api";
 import Navbar from "../components/Navbar";
 import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
+
+const STATUSES = ["submitted", "under_review", "approved", "rejected", "funded"] as const;
+type SortBy = "newest" | "oldest" | "income_high" | "income_low" | "name_az";
 
 export default function AdminDashboard() {
   const [apps, setApps] = useState<Application[]>([]);
@@ -12,9 +15,18 @@ export default function AdminDashboard() {
   const [, setBudgetState] = useState<Budget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("newest");
+  const [rowStatus, setRowStatus] = useState<Record<number, string>>({});
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const load = () => {
-    getApplications(statusFilter ? { status: statusFilter } : {}).then(setApps);
+    getApplications(statusFilter ? { status: statusFilter } : {}).then((data) => {
+      setApps(data);
+      const next: Record<number, string> = {};
+      data.forEach((app) => { next[app.id] = app.status; });
+      setRowStatus(next);
+    });
     getStats().then(setStats);
     getBudget().then(b => { setBudgetState(b); setBudgetInput(String(b.total_amount)); });
   };
@@ -24,6 +36,39 @@ export default function AdminDashboard() {
   const handleBudget = async () => {
     await setBudget(+budgetInput);
     load();
+  };
+
+  const visibleApps = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    let list = apps;
+    if (term) {
+      list = list.filter((app) =>
+        app.full_name.toLowerCase().includes(term) ||
+        app.institution.toLowerCase().includes(term) ||
+        app.course.toLowerCase().includes(term)
+      );
+    }
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortBy === "income_high") return b.annual_income - a.annual_income;
+      if (sortBy === "income_low") return a.annual_income - b.annual_income;
+      return a.full_name.localeCompare(b.full_name);
+    });
+    return sorted;
+  }, [apps, search, sortBy]);
+
+  const quickSetStatus = async (appId: number) => {
+    const nextStatus = rowStatus[appId];
+    if (!nextStatus) return;
+    setUpdatingId(appId);
+    try {
+      await updateApplication(appId, { status: nextStatus });
+      load();
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   return (
@@ -65,9 +110,22 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-4 border-b flex items-center gap-3">
             <h3 className="font-semibold text-gray-800 flex-1">Applications</h3>
+            <input
+              className="input w-64"
+              placeholder="Search name, institution, course"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <select className="input w-44" value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="income_high">Income: High to Low</option>
+              <option value="income_low">Income: Low to High</option>
+              <option value="name_az">Name: A to Z</option>
+            </select>
             <select className="input w-44" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="">All Statuses</option>
-              {["submitted","under_review","approved","rejected","funded"].map(s => (
+              {STATUSES.map(s => (
                 <option key={s} value={s}>{s.replace("_"," ")}</option>
               ))}
             </select>
@@ -81,7 +139,7 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {apps.map(app => (
+              {visibleApps.map(app => (
                 <tr key={app.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-400">{app.id}</td>
                   <td className="px-4 py-3 font-medium">{app.full_name}</td>
@@ -90,13 +148,31 @@ export default function AdminDashboard() {
                   <td className="px-4 py-3"><StatusBadge status={app.status} /></td>
                   <td className="px-4 py-3 text-gray-400">{new Date(app.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <Link to={`/admin/applications/${app.id}`} className="text-blue-500 hover:underline">Review</Link>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="input w-36 !py-1"
+                        value={rowStatus[app.id] ?? app.status}
+                        onChange={e => setRowStatus(prev => ({ ...prev, [app.id]: e.target.value }))}
+                      >
+                        {STATUSES.map(s => (
+                          <option key={s} value={s}>{s.replace("_", " ")}</option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn-primary !py-1 !px-2 text-xs"
+                        onClick={() => quickSetStatus(app.id)}
+                        disabled={updatingId === app.id}
+                      >
+                        {updatingId === app.id ? "Saving..." : "Save"}
+                      </button>
+                      <Link to={`/admin/applications/${app.id}`} className="text-blue-500 hover:underline">Review</Link>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {apps.length === 0 && <p className="text-center text-gray-400 py-8">No applications found.</p>}
+          {visibleApps.length === 0 && <p className="text-center text-gray-400 py-8">No applications found.</p>}
         </div>
       </div>
     </div>
