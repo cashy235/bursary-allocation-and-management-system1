@@ -4,6 +4,7 @@ import { getApplications } from "../api";
 import type { Application } from "../api";
 import { useAuth } from "../AuthContext";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
 export default function StudentDashboard() {
@@ -17,6 +18,7 @@ export default function StudentDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <PlatformBanner />
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-800">My Applications</h2>

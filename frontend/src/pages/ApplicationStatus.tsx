@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { getApplication } from "../api";
 import type { Application } from "../api";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
 export default function ApplicationStatus() {
@@ -13,11 +14,18 @@ export default function ApplicationStatus() {
     if (id) getApplication(+id).then(setApp);
   }, [id]);
 
-  if (!app) return <div className="min-h-screen bg-gray-50"><Navbar /><p className="p-6 text-gray-400">Loading...</p></div>;
+  if (!app) return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <PlatformBanner />
+      <p className="p-6 text-gray-400">Loading...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <PlatformBanner />
       <div className="max-w-2xl mx-auto p-6 space-y-4">
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex justify-between items-start mb-4">

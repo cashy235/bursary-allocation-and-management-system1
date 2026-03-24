@@ -9,7 +9,7 @@ export default function Navbar() {
   return (
     <nav className="bg-white border-b shadow-sm px-6 py-3 flex items-center justify-between">
       <Link to={user?.role === "admin" ? "/admin" : "/dashboard"}
-        className="text-blue-700 font-bold text-lg">🎓 Bursary System</Link>
+        className="text-blue-700 font-bold text-lg">🎓 Bursary Cloud</Link>
       <div className="flex items-center gap-4">
         {user?.role === "student" && (
           <Link to="/apply" className="text-sm text-gray-600 hover:text-blue-600">Apply</Link>

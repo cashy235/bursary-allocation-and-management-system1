@@ -17,8 +17,9 @@ export interface Application {
 }
 export interface Budget { id: number; total_amount: number; allocated_amount: number; }
 
-export const login = (username: string, password: string) =>
-  api.post<User>("/login", { username, password }).then(r => r.data);
+/** Demo login: backend accepts any username (admin gets admin role). */
+export const login = (username: string) =>
+  api.post<User>("/login", { username }).then(r => r.data);
 
 export const getApplications = (params?: { user_id?: number; status?: string }) =>
   api.get<Application[]>("/applications", { params }).then(r => r.data);

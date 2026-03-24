@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { createApplication, uploadDocument } from "../api";
 import { useAuth } from "../AuthContext";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 
 export default function ApplicationForm() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export default function ApplicationForm() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <PlatformBanner />
       <div className="max-w-2xl mx-auto p-6">
         <h2 className="text-xl font-bold text-gray-800 mb-6">Bursary Application</h2>
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-4">

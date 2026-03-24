@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getApplications, getStats, getBudget, setBudget } from "../api";
 import type { Application, Budget } from "../api";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
 export default function AdminDashboard() {
@@ -28,6 +29,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+      <PlatformBanner />
       <div className="max-w-6xl mx-auto p-6 space-y-6">
 
         {/* Stats */}
