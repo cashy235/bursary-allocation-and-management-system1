@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, register } from "../api";
+import { login, register, getCurrentUser } from "../api";
 import { useAuth } from "../AuthContext";
 
 export default function Login() {
@@ -122,4 +122,3 @@ export default function Login() {
   );
 }
 
-import { getCurrentUser } from "../api";

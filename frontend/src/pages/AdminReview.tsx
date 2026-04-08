@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getApplication, updateApplication, allocate } from "../api";
-import type { Application } from "../api";
+import { getApplication, updateApplication, createAward } from "../api";
+import type { Application, ApplicationStatus } from "../api";
 import Navbar from "../components/Navbar";
 import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
-const STATUSES = ["submitted", "under_review", "approved", "rejected", "funded"];
+const STATUSES: ApplicationStatus[] = ["draft", "submitted", "under_review", "documents_verified", "pending_decision", "approved", "rejected", "awarded", "disbursed", "closed"];
 
 export default function AdminReview() {
   const { id } = useParams();
   const nav = useNavigate();
   const [app, setApp] = useState<Application | null>(null);
   const [notes, setNotes] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<ApplicationStatus>("submitted");
   const [amount, setAmount] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -31,7 +31,11 @@ export default function AdminReview() {
 
   const handleAllocate = async () => {
     try {
-      await allocate(+id!, +amount);
+      await createAward(+id!, {
+        total_amount: +amount,
+        tuition_amount: Math.round(+amount * 0.75),
+        upkeep_amount: Math.round(+amount * 0.25),
+      });
       setMsg("Funds allocated!");
       load();
     } catch (e: any) {
@@ -91,7 +95,7 @@ export default function AdminReview() {
           <div className="space-y-3 border-t pt-4">
             <div>
               <label className="label">Update Status</label>
-              <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
+              <select className="input" value={status} onChange={e => setStatus(e.target.value as ApplicationStatus)}>
                 {STATUSES.map(s => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
               </select>
             </div>
@@ -103,16 +107,16 @@ export default function AdminReview() {
           </div>
 
           {/* Allocation */}
-          {(app.status === "approved" || app.status === "funded") && (
+          {(app.status === "approved" || app.status === "awarded") && (
             <div className="border-t pt-4 mt-4 space-y-3">
               <h3 className="font-semibold text-gray-700">Allocate Funds</h3>
-              {app.allocation && (
-                <p className="text-sm text-green-600">Currently allocated: KES {app.allocation.amount.toLocaleString()}</p>
+              {app.award && (
+                <p className="text-sm text-green-600">Currently awarded: KES {app.award.total_amount.toLocaleString()}</p>
               )}
               <div className="flex gap-3">
                 <input className="input flex-1" type="number" placeholder="Amount (KES)"
                   value={amount} onChange={e => setAmount(e.target.value)} />
-                <button className="btn-success" onClick={handleAllocate}>Allocate</button>
+                <button className="btn-success" onClick={handleAllocate}>Award</button>
               </div>
             </div>
           )}

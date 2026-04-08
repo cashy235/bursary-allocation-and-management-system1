@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../AuthContext";
-import { getApplications, getStats, Application, ApplicationStatus } from "../api";
+import { getApplications } from "../api";
+import type { Application } from "../api";
 import StatusBadge from "../components/StatusBadge";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 
 export default function CommitteeDashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -35,8 +36,9 @@ export default function CommitteeDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar title="Committee Dashboard" user={user} onLogout={logout} />
-      <div className="container mx-auto p-6">
+      <Navbar />
+      <PlatformBanner />
+      <div className="max-w-6xl mx-auto p-6">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-800">Bursary Applications - Committee Review</h1>
         </div>

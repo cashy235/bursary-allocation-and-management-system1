@@ -22,10 +22,10 @@ export default function ApplicationForm() {
     if (!user) return;
     setLoading(true);
     try {
-      const app = await createApplication(user.id, form);
+      const app = await createApplication(form);
       if (files) {
         for (const file of Array.from(files)) {
-          await uploadDocument(app.id, file);
+          await uploadDocument(app.id, "document", file);
         }
       }
       nav(`/applications/${app.id}`);

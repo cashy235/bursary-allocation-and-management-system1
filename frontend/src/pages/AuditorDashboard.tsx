@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
-import { getAuditLogs, getReport, getApplications, exportCSV, AuditLog, ApplicationStatus } from "../api";
+import { getAuditLogs, getReport, exportCSV } from "../api";
+import type { AuditLog } from "../api";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 
 export default function AuditorDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -53,8 +55,9 @@ export default function AuditorDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar title="Auditor Dashboard" user={user} onLogout={logout} />
-      <div className="container mx-auto p-6">
+      <Navbar />
+      <PlatformBanner />
+      <div className="max-w-6xl mx-auto p-6">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-800">Audit & Reports</h1>
           <div className="flex gap-2">

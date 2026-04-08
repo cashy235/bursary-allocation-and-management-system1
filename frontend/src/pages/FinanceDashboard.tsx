@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
-import { getAwards, getDisbursements, getBudget, setBudget, Award, Disbursement, Budget, ApplicationStatus } from "../api";
+import { getAwards, getDisbursements, getBudget, setBudget } from "../api";
+import type { Award, Disbursement, Budget } from "../api";
 import Navbar from "../components/Navbar";
+import PlatformBanner from "../components/PlatformBanner";
 
 export default function FinanceDashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [awards, setAwards] = useState<Award[]>([]);
   const [disbursements, setDisbursements] = useState<Disbursement[]>([]);
   const [budget, setBudgetData] = useState<Budget | null>(null);
@@ -47,12 +47,12 @@ export default function FinanceDashboard() {
   };
 
   const pendingDisbursements = disbursements.filter(d => d.status === "pending");
-  const totalPaid = disbursements.filter(d => d.status === "paid").reduce((sum, d) => sum + d.amount, 0);
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar title="Finance Dashboard" user={user} onLogout={logout} />
-      <div className="container mx-auto p-6">
+      <Navbar />
+      <PlatformBanner />
+      <div className="max-w-6xl mx-auto p-6">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-800">Finance & Disbursement Management</h1>
         </div>

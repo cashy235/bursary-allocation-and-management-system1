@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getApplications } from "../api";
-import type { Application } from "../api";
+import type { Application, ApplicationStatus, PaginatedResponse } from "../api";
 import { useAuth } from "../AuthContext";
 import Navbar from "../components/Navbar";
 import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
-const STATUSES = ["submitted", "under_review", "approved", "funded", "rejected"] as const;
-type StatusFilter = "all" | (typeof STATUSES)[number];
+const STATUSES: ApplicationStatus[] = ["submitted", "under_review", "approved", "rejected", "awarded", "disbursed"];
+type StatusFilter = "all" | ApplicationStatus;
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -17,17 +17,21 @@ export default function StudentDashboard() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
-    if (user) getApplications({ user_id: user.id }).then(setApps);
+    if (user) {
+      getApplications({ user_id: user.id, page_size: 100 }).then((data: PaginatedResponse<Application>) => {
+        setApps(data.items);
+      });
+    }
   }, [user]);
 
   const summary = useMemo(() => {
-    const by = (status: string) => apps.filter(a => a.status === status).length;
+    const by = (status: ApplicationStatus) => apps.filter(a => a.status === status).length;
     return {
       total: apps.length,
       submitted: by("submitted"),
       underReview: by("under_review"),
       approved: by("approved"),
-      funded: by("funded"),
+      awarded: by("awarded"),
       rejected: by("rejected"),
     };
   }, [apps]);
@@ -61,7 +65,7 @@ export default function StudentDashboard() {
               <SummaryCard label="Submitted" value={summary.submitted} tone="blue" />
               <SummaryCard label="Under Review" value={summary.underReview} tone="yellow" />
               <SummaryCard label="Approved" value={summary.approved} tone="emerald" />
-              <SummaryCard label="Funded" value={summary.funded} tone="green" />
+              <SummaryCard label="Awarded" value={summary.awarded} tone="green" />
               <SummaryCard label="Rejected" value={summary.rejected} tone="rose" />
             </div>
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3">
@@ -102,9 +106,9 @@ export default function StudentDashboard() {
                   </div>
                   <StatusBadge status={app.status} />
                 </div>
-                {app.allocation && (
+                {app.award && (
                   <p className="mt-2 text-sm text-green-600 font-medium">
-                    Allocated: KES {app.allocation.amount.toLocaleString()}
+                    Awarded: KES {app.award.total_amount.toLocaleString()}
                   </p>
                 )}
                 <div className="mt-3">
@@ -142,16 +146,21 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
   );
 }
 
-function ProgressBar({ status }: { status: Application["status"] }) {
-  const progressByStatus: Record<Application["status"], number> = {
+function ProgressBar({ status }: { status: ApplicationStatus }) {
+  const progressByStatus: Record<ApplicationStatus, number> = {
+    draft: 10,
     submitted: 20,
-    under_review: 50,
+    under_review: 40,
+    documents_verified: 50,
+    pending_decision: 60,
     approved: 80,
-    funded: 100,
     rejected: 100,
+    awarded: 90,
+    disbursed: 100,
+    closed: 100,
   };
-  const progress = progressByStatus[status];
-  const color = status === "rejected" ? "bg-red-500" : "bg-blue-600";
+  const progress = progressByStatus[status] || 0;
+  const color = status === "rejected" ? "bg-red-500" : status === "awarded" || status === "disbursed" ? "bg-green-500" : "bg-blue-600";
   return (
     <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
       <div className={`h-2 ${color}`} style={{ width: `${progress}%` }} />

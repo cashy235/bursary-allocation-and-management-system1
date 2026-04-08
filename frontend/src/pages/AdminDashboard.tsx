@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getApplications, getStats, getBudget, setBudget, updateApplication } from "../api";
-import type { Application, Budget } from "../api";
+import type { Application, Budget, ApplicationStatus, PaginatedResponse } from "../api";
 import Navbar from "../components/Navbar";
 import PlatformBanner from "../components/PlatformBanner";
 import StatusBadge from "../components/StatusBadge";
 
-const STATUSES = ["submitted", "under_review", "approved", "rejected", "funded"] as const;
+const STATUSES: ApplicationStatus[] = ["draft", "submitted", "under_review", "documents_verified", "pending_decision", "approved", "rejected", "awarded", "disbursed", "closed"];
 type SortBy = "newest" | "oldest" | "income_high" | "income_low" | "name_az";
 
 export default function AdminDashboard() {
@@ -14,17 +14,18 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [, setBudgetState] = useState<Budget | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "">("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
-  const [rowStatus, setRowStatus] = useState<Record<number, string>>({});
+  const [rowStatus, setRowStatus] = useState<Record<number, ApplicationStatus>>({});
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const load = () => {
-    getApplications(statusFilter ? { status: statusFilter } : {}).then((data) => {
-      setApps(data);
-      const next: Record<number, string> = {};
-      data.forEach((app) => { next[app.id] = app.status; });
+    const params = statusFilter ? { status: statusFilter, page_size: 100 } : { page_size: 100 };
+    getApplications(params).then((data: PaginatedResponse<Application>) => {
+      setApps(data.items);
+      const next: Record<number, ApplicationStatus> = {};
+      data.items.forEach((app) => { next[app.id] = app.status; });
       setRowStatus(next);
     });
     getStats().then(setStats);
@@ -34,7 +35,8 @@ export default function AdminDashboard() {
   useEffect(() => { load(); }, [statusFilter]);
 
   const handleBudget = async () => {
-    await setBudget(+budgetInput);
+    const budget = await getBudget();
+    await setBudget(budget.academic_year || "2024-2025", +budgetInput);
     load();
   };
 
@@ -81,9 +83,9 @@ export default function AdminDashboard() {
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Total Applications" value={stats.total_applications} color="blue" />
-            <StatCard label="Budget (KES)" value={stats.budget.total.toLocaleString()} color="gray" />
-            <StatCard label="Allocated (KES)" value={stats.budget.allocated.toLocaleString()} color="green" />
-            <StatCard label="Remaining (KES)" value={stats.budget.remaining.toLocaleString()} color="yellow" />
+            <StatCard label="Budget (KES)" value={Number(stats.budget.total).toLocaleString()} color="gray" />
+            <StatCard label="Allocated (KES)" value={Number(stats.budget.allocated).toLocaleString()} color="green" />
+            <StatCard label="Remaining (KES)" value={Number(stats.budget.remaining).toLocaleString()} color="yellow" />
           </div>
         )}
 
@@ -123,7 +125,7 @@ export default function AdminDashboard() {
               <option value="income_low">Income: Low to High</option>
               <option value="name_az">Name: A to Z</option>
             </select>
-            <select className="input w-44" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <select className="input w-44" value={statusFilter} onChange={e => setStatusFilter(e.target.value as ApplicationStatus | "")}>
               <option value="">All Statuses</option>
               {STATUSES.map(s => (
                 <option key={s} value={s}>{s.replace("_"," ")}</option>
@@ -152,7 +154,7 @@ export default function AdminDashboard() {
                       <select
                         className="input w-36 !py-1"
                         value={rowStatus[app.id] ?? app.status}
-                        onChange={e => setRowStatus(prev => ({ ...prev, [app.id]: e.target.value }))}
+                        onChange={e => setRowStatus(prev => ({ ...prev, [app.id]: e.target.value as ApplicationStatus }))}
                       >
                         {STATUSES.map(s => (
                           <option key={s} value={s}>{s.replace("_", " ")}</option>

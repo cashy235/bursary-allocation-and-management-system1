@@ -193,7 +193,7 @@ export interface AuditLog {
 
 // Auth
 export const register = (username: string, email: string, password: string, fullName?: string) =>
-  api.post<Token>("/auth/register", { username, email, password, full_name: fullName }).then(r => r.data);
+  api.post<Token>("/auth/register", { username, email: email || undefined, password, full_name: fullName || undefined }).then(r => r.data);
 
 export const login = (username: string, password: string) =>
   api.post<Token>("/auth/login", { username, password }).then(r => r.data);

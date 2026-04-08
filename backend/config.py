@@ -1,7 +1,7 @@
 import os
 import sys
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://bursary:bursary@localhost:5432/bursary_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bursary.db")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey-change-in-production")
 ALGORITHM = "HS256"

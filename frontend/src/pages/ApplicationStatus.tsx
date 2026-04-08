@@ -57,10 +57,10 @@ export default function ApplicationStatus() {
               <p className="text-sm text-yellow-800 mt-1">{app.notes}</p>
             </div>
           )}
-          {app.allocation && (
+          {app.award && (
             <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-xs text-green-700 font-medium">Bursary Allocated</p>
-              <p className="text-2xl font-bold text-green-700 mt-1">KES {app.allocation.amount.toLocaleString()}</p>
+              <p className="text-xs text-green-700 font-medium">Bursary Awarded</p>
+              <p className="text-2xl font-bold text-green-700 mt-1">KES {app.award.total_amount.toLocaleString()}</p>
             </div>
           )}
         </div>
