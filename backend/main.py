@@ -103,6 +103,8 @@ def get_current_user_info(current_user = Depends(get_current_user)):
 @app.put("/auth/profile", response_model=schemas.UserOut)
 def update_profile(data: schemas.UserUpdate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     user = crud.update_user(db, current_user.id, email=data.email, full_name=data.full_name)
+    crud.audit_log_action(db, current_user.id, "update_profile", "user", current_user.id, "Updated profile")
+    return user
 
 
 @app.post("/auth/change-password", response_model=schemas.UserOut)
@@ -117,7 +119,7 @@ def change_password(data: schemas.PasswordChange, current_user = Depends(get_cur
 
 
 # ── Users (Admin) ────────────────────────────────────────────────────────────
-@app.get("/users", response_model=List[schemas.UserOut])
+@app.get("/users", response_model=dict)
 def list_users(
     role: Optional[RoleEnum] = Query(None),
     page: int = Query(1, ge=1),
@@ -132,7 +134,13 @@ def list_users(
     total = query.count()
     total_pages = (total + page_size - 1) // page_size
     users = query.offset((page - 1) * page_size).limit(page_size).all()
-    return users
+    return {
+        "items": users,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @app.get("/users/{user_id}", response_model=schemas.UserOut)
@@ -409,14 +417,20 @@ def export_csv(
 def seed_data(db: Session = Depends(get_db)):
     from models import RoleEnum, ApplicationStatus, DocumentStatus
     
-    admin_user = crud.create_user(db, "admin", "admin@bursary.gov", "admin123", "System Administrator", RoleEnum.admin)
-    committee_user = crud.create_user(db, "committee", "committee@bursary.gov", "committee123", "Dr. Jane Committee", RoleEnum.committee)
-    finance_user = crud.create_user(db, "finance", "finance@bursary.gov", "finance123", "Mr. John Finance", RoleEnum.finance)
-    auditor_user = crud.create_user(db, "auditor", "auditor@bursary.gov", "auditor123", "Ms. Sarah Audit", RoleEnum.auditor)
+    def get_or_create(username: str, email: str, password: str, full_name: str, role: RoleEnum):
+        existing = crud.get_user_by_username(db, username)
+        if existing:
+            return existing
+        return crud.create_user(db, username, email, password, full_name, role)
+
+    admin_user = get_or_create("admin", "admin@bursary.gov", "admin123", "System Administrator", RoleEnum.admin)
+    committee_user = get_or_create("committee", "committee@bursary.gov", "committee123", "Dr. Jane Committee", RoleEnum.committee)
+    finance_user = get_or_create("finance", "finance@bursary.gov", "finance123", "Mr. John Finance", RoleEnum.finance)
+    auditor_user = get_or_create("auditor", "auditor@bursary.gov", "auditor123", "Ms. Sarah Audit", RoleEnum.auditor)
     
-    student1 = crud.create_user(db, "alice", "alice@student.edu", "student123", "Alice Wanjiku", RoleEnum.student)
-    student2 = crud.create_user(db, "bob", "bob@student.edu", "student123", "Bob Otieno", RoleEnum.student)
-    student3 = crud.create_user(db, "charlie", "charlie@student.edu", "student123", "Charles Kamau", RoleEnum.student)
+    student1 = get_or_create("alice", "alice@student.edu", "student123", "Alice Wanjiku", RoleEnum.student)
+    student2 = get_or_create("bob", "bob@student.edu", "student123", "Bob Otieno", RoleEnum.student)
+    student3 = get_or_create("charlie", "charlie@student.edu", "student123", "Charles Kamau", RoleEnum.student)
     
     crud.update_budget(db, "2024-2025", 5000000.0)
     
@@ -429,7 +443,7 @@ def seed_data(db: Session = Depends(get_db)):
         reason="Single parent household with limited income. Father passed away in 2022.",
         bank_name="KCB", bank_account="1234567890"
     ), student1.id)
-    app1 = crud.update_application(db, app1.id, admin.id, schemas.ApplicationUpdate(status=ApplicationStatus.submitted))
+    app1 = crud.update_application(db, app1.id, admin_user.id, schemas.ApplicationUpdate(status=ApplicationStatus.submitted))
     
     app2 = crud.create_application(db, schemas.ApplicationCreate(
         full_name="Bob Otieno", email="bob@student.edu", phone="+254798765432",
@@ -455,15 +469,15 @@ def seed_data(db: Session = Depends(get_db)):
         doc_type="id", filename="id_alice.pdf", original_filename="national_id_alice.pdf",
         file_path=f"{UPLOAD_DIR}/id_alice.pdf", file_size=1024000, mime_type="application/pdf"
     ), app1.id)
-    crud.verify_document(db, doc1.id, admin.id, schemas.DocumentUpdate(status=DocumentStatus.verified, verification_notes="ID verified"))
+    crud.verify_document(db, doc1.id, admin_user.id, schemas.DocumentUpdate(status=DocumentStatus.verified, verification_notes="ID verified"))
     
     doc2 = crud.create_document(db, schemas.DocumentCreate(
         doc_type="admission", filename="adm_alice.pdf", original_filename="admission_letter_alice.pdf",
         file_path=f"{UPLOAD_DIR}/adm_alice.pdf", file_size=512000, mime_type="application/pdf"
     ), app1.id)
-    crud.verify_document(db, doc2.id, admin.id, schemas.DocumentUpdate(status=DocumentStatus.verified))
+    crud.verify_document(db, doc2.id, admin_user.id, schemas.DocumentUpdate(status=DocumentStatus.verified))
     
-    crud.create_review(db, app1.id, admin.id, schemas.ReviewCreate(
+    crud.create_review(db, app1.id, admin_user.id, schemas.ReviewCreate(
         completeness_check=True, eligibility_check=True, income_verified=True, institution_verified=True,
         notes="All documents complete. Student meets eligibility criteria.", recommendation="approve"
     ))
@@ -474,7 +488,7 @@ def seed_data(db: Session = Depends(get_db)):
         notes="Deserving candidate based on financial need assessment."
     ))
     
-    crud.update_application(db, app1.id, admin.id, schemas.ApplicationUpdate(status=ApplicationStatus.approved))
+    crud.update_application(db, app1.id, admin_user.id, schemas.ApplicationUpdate(status=ApplicationStatus.approved))
     
     crud.create_award(db, app1.id, finance_user.id, schemas.AwardCreate(
         total_amount=80000, tuition_amount=60000, upkeep_amount=20000,
@@ -482,7 +496,7 @@ def seed_data(db: Session = Depends(get_db)):
         notes="Full bursary awarded based on committee decision"
     ))
     
-    return {"message": "Database seeded successfully", "users": 7}
+    return {"message": "Database seeded successfully"}
 
 
 @app.get("/health")

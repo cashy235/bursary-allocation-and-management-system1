@@ -11,22 +11,53 @@ interface AuthCtx {
 const Ctx = createContext<AuthCtx>({ user: null, setUser: () => {}, logout: () => {}, loading: true });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem("user");
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as User;
+    } catch {
+      localStorage.removeItem("user");
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isActive = true;
     const token = localStorage.getItem("access_token");
-    if (token) {
-      getCurrentUser()
-        .then((u) => setUser(u))
-        .catch(() => {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-        })
-        .finally(() => setLoading(false));
-    } else {
+    if (!token) {
       setLoading(false);
+      return;
     }
+
+    // Prevent infinite loading if request hangs in poor network conditions.
+    const timeoutId = window.setTimeout(() => {
+      if (isActive) setLoading(false);
+    }, 8000);
+
+    getCurrentUser()
+      .then((u) => {
+        if (!isActive) return;
+        setUserWithStorage(u);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("user");
+        setUser(null);
+      })
+      .finally(() => {
+        if (!isActive) return;
+        window.clearTimeout(timeoutId);
+        setLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const logout = () => {

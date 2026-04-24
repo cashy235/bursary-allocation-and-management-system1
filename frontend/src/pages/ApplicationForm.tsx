@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createApplication, uploadDocument } from "../api";
+import { createApplication, submitApplication, uploadDocument } from "../api";
 import { useAuth } from "../AuthContext";
 import Navbar from "../components/Navbar";
 import PlatformBanner from "../components/PlatformBanner";
@@ -11,8 +11,13 @@ export default function ApplicationForm() {
   const [files, setFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    full_name: "", institution: "", course: "",
-    year_of_study: 1, annual_income: 0, reason: ""
+    full_name: user?.full_name || "",
+    email: user?.email || "",
+    institution: "",
+    course: "",
+    year_of_study: 1,
+    annual_income: 0,
+    reason: "",
   });
 
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }));
@@ -20,6 +25,10 @@ export default function ApplicationForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!form.email) {
+      alert("Your account is missing an email address. Please update your profile and try again.");
+      return;
+    }
     setLoading(true);
     try {
       const app = await createApplication(form);
@@ -28,6 +37,7 @@ export default function ApplicationForm() {
           await uploadDocument(app.id, "document", file);
         }
       }
+      await submitApplication(app.id);
       nav(`/applications/${app.id}`);
     } catch {
       alert("Submission failed.");
@@ -47,6 +57,10 @@ export default function ApplicationForm() {
             <div>
               <label className="label">Full Name</label>
               <input className="input" value={form.full_name} onChange={e => set("full_name", e.target.value)} required />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input className="input" type="email" value={form.email} onChange={e => set("email", e.target.value)} required />
             </div>
             <div>
               <label className="label">Institution</label>
