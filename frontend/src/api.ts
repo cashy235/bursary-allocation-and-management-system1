@@ -49,6 +49,9 @@ export interface User {
   username: string;
   email?: string;
   full_name?: string;
+  school_id?: string;
+  department_id?: string;
+  course_id?: string;
   role: Role;
   is_active: boolean;
   created_at: string;

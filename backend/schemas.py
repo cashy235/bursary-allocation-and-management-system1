@@ -41,6 +41,9 @@ class UserOut(BaseModel):
     username: str
     email: Optional[str]
     full_name: Optional[str]
+    school_id: Optional[str]
+    department_id: Optional[str]
+    course_id: Optional[str]
     role: RoleEnum
     is_active: bool
     created_at: datetime

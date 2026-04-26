@@ -25,6 +25,7 @@ import {
   register,
   setBudget,
   submitApplication,
+  uploadDocument,
   updateApplication,
 } from "./api";
 
@@ -688,6 +689,9 @@ function StudentDashboard({ user, apps, onNav }: { user: User; apps: Application
 function ApplicationWizard({ user, onCreated, onCancel }: { user: User; onCreated: (app: Application) => void; onCancel: () => void }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [idDocument, setIdDocument] = useState<File | null>(null);
+  const [feeStructure, setFeeStructure] = useState<File | null>(null);
   const [form, setForm] = useState({
     full_name: user.full_name || "",
     email: user.email || "",
@@ -709,31 +713,72 @@ function ApplicationWizard({ user, onCreated, onCancel }: { user: User; onCreate
   });
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  useEffect(() => {
+    let isActive = true;
+    const hydrateAcademicFromProfile = async () => {
+      if (user.role !== "student") return;
+      if (!user.school_id && !user.department_id && !user.course_id) return;
+      try {
+        const schools = await getSchools();
+        const institutionName = schools.find((s) => s.id === user.school_id)?.name;
+        let courseName = "";
+        if (user.department_id) {
+          const courses = await getCourses(user.department_id);
+          courseName = courses.find((c) => c.id === user.course_id)?.name || "";
+        }
+        if (!isActive) return;
+        setForm((prev) => ({
+          ...prev,
+          institution: prev.institution || institutionName || "",
+          course: prev.course || courseName || "",
+        }));
+      } catch {
+        // Keep manual entry fallback if lookups fail.
+      }
+    };
+    void hydrateAcademicFromProfile();
+    return () => {
+      isActive = false;
+    };
+  }, [user.role, user.school_id, user.department_id, user.course_id]);
+
   const handleSubmit = async () => {
     if (!form.email) return;
+    if (!idDocument || !feeStructure) {
+      setError("Upload both National ID and Fee Structure before submitting.");
+      return;
+    }
     setLoading(true);
-    const created = await createApplication({
-      full_name: form.full_name,
-      email: form.email,
-      phone: form.phone || undefined,
-      id_number: form.id_number || undefined,
-      institution: form.institution,
-      admission_number: form.admission_number || undefined,
-      course: form.course,
-      year_of_study: +form.year_of_study,
-      campus: form.campus || undefined,
-      guardian_name: form.guardian_name || undefined,
-      guardian_phone: form.guardian_phone || undefined,
-      annual_income: +form.annual_income,
-      household_size: form.household_size ? +form.household_size : undefined,
-      siblings_in_school: form.siblings_in_school ? +form.siblings_in_school : undefined,
-      reason: form.reason,
-      bank_name: form.bank_name || undefined,
-      bank_account: form.bank_account || undefined,
-    });
-    const submitted = await submitApplication(created.id);
-    onCreated(submitted);
-    setLoading(false);
+    setError("");
+    try {
+      const created = await createApplication({
+        full_name: form.full_name,
+        email: form.email,
+        phone: form.phone || undefined,
+        id_number: form.id_number || undefined,
+        institution: form.institution,
+        admission_number: form.admission_number || undefined,
+        course: form.course,
+        year_of_study: +form.year_of_study,
+        campus: form.campus || undefined,
+        guardian_name: form.guardian_name || undefined,
+        guardian_phone: form.guardian_phone || undefined,
+        annual_income: +form.annual_income,
+        household_size: form.household_size ? +form.household_size : undefined,
+        siblings_in_school: form.siblings_in_school ? +form.siblings_in_school : undefined,
+        reason: form.reason,
+        bank_name: form.bank_name || undefined,
+        bank_account: form.bank_account || undefined,
+      });
+      await uploadDocument(created.id, "id", idDocument);
+      await uploadDocument(created.id, "fee_structure", feeStructure);
+      const submitted = await submitApplication(created.id);
+      onCreated(submitted);
+    } catch (e) {
+      setError("Failed to submit application. Please check the documents and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const steps = ["Personal Info", "Academic Info", "Financial Info", "Statement"];
@@ -809,6 +854,33 @@ function ApplicationWizard({ user, onCreated, onCancel }: { user: User; onCreate
           <>
             <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, margin: "0 0 20px", color: "#111827" }}>Personal Statement</h3>
             <Input label="Reason for applying" value={form.reason} onChange={set("reason")} rows={7} required style={{ fontFamily: "'Instrument Serif', serif" }} />
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                National ID Document <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setIdDocument(e.target.files?.[0] || null)}
+                style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #d1d5db", borderRadius: 10, fontSize: 14 }}
+              />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                Fee Structure Document <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setFeeStructure(e.target.files?.[0] || null)}
+                style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #d1d5db", borderRadius: 10, fontSize: 14 }}
+              />
+            </div>
+            {error && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#dc2626", marginBottom: 16 }}>
+                {error}
+              </div>
+            )}
             <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
               <p style={{ margin: 0, fontSize: 13, color: "#0369a1" }}>
                 <strong>Declaration:</strong> I declare that all information provided is true and accurate.

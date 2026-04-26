@@ -10,7 +10,7 @@ from datetime import datetime
 import os, shutil, uuid, io
 import csv
 
-from database import engine, get_db, Base
+from database import engine, get_db, Base, SessionLocal
 import models, crud, schemas
 from auth import verify_password, create_tokens, decode_token
 from dependencies import (
@@ -40,6 +40,135 @@ app.add_middleware(
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+def ensure_lookup_tables_and_data() -> None:
+    schools = [
+        {"id": "uon", "name": "University of Nairobi"},
+        {"id": "ku", "name": "Kenyatta University"},
+        {"id": "jkuat", "name": "Jomo Kenyatta University of Agriculture and Technology"},
+        {"id": "mku", "name": "Mount Kenya University"},
+        {"id": "egerton", "name": "Egerton University"},
+        {"id": "maseno", "name": "Maseno University"},
+        {"id": "mmust", "name": "Masinde Muliro University of Science and Technology"},
+    ]
+    departments = [
+        {"id": "uon_cs", "name": "Computer Science", "school_id": "uon"},
+        {"id": "uon_bus", "name": "Business and Economics", "school_id": "uon"},
+        {"id": "uon_med", "name": "Medicine", "school_id": "uon"},
+        {"id": "ku_edu", "name": "Education", "school_id": "ku"},
+        {"id": "ku_eng", "name": "Engineering", "school_id": "ku"},
+        {"id": "jkuat_ict", "name": "ICT", "school_id": "jkuat"},
+        {"id": "jkuat_agri", "name": "Agriculture", "school_id": "jkuat"},
+        {"id": "mku_health", "name": "Health Sciences", "school_id": "mku"},
+        {"id": "egerton_agri", "name": "Agriculture and Natural Resources", "school_id": "egerton"},
+        {"id": "maseno_bus", "name": "Business and Economics", "school_id": "maseno"},
+        {"id": "mmust_comp", "name": "Computing and Informatics", "school_id": "mmust"},
+    ]
+    courses = [
+        {"id": "course_uon_bsc_cs", "name": "BSc Computer Science", "code": "CSC", "department_id": "uon_cs"},
+        {"id": "course_uon_bsc_it", "name": "BSc Information Technology", "code": "BIT", "department_id": "uon_cs"},
+        {"id": "course_uon_bcom", "name": "Bachelor of Commerce", "code": "BCOM", "department_id": "uon_bus"},
+        {"id": "course_uon_mbchb", "name": "Bachelor of Medicine and Surgery", "code": "MBChB", "department_id": "uon_med"},
+        {"id": "course_ku_bed", "name": "Bachelor of Education", "code": "BEd", "department_id": "ku_edu"},
+        {"id": "course_ku_beng", "name": "Bachelor of Engineering", "code": "BEng", "department_id": "ku_eng"},
+        {"id": "course_jkuat_bsc_it", "name": "BSc Information Technology", "code": "BSc IT", "department_id": "jkuat_ict"},
+        {"id": "course_jkuat_bsc_cs", "name": "BSc Computer Science", "code": "BSc CS", "department_id": "jkuat_ict"},
+        {"id": "course_jkuat_bsc_agri", "name": "BSc Agriculture", "code": "BSc AGR", "department_id": "jkuat_agri"},
+        {"id": "course_mku_bpharm", "name": "Bachelor of Pharmacy", "code": "BPharm", "department_id": "mku_health"},
+        {"id": "course_egerton_bsc_agri", "name": "BSc Agribusiness Management", "code": "AGBM", "department_id": "egerton_agri"},
+        {"id": "course_maseno_bba", "name": "Bachelor of Business Administration", "code": "BBA", "department_id": "maseno_bus"},
+        {"id": "course_mmust_bsc_cs", "name": "BSc Computer Science", "code": "BSc CS", "department_id": "mmust_comp"},
+    ]
+
+    db = SessionLocal()
+    try:
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS schools (
+                    id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS departments (
+                    id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    school_id VARCHAR(64) NOT NULL,
+                    FOREIGN KEY (school_id) REFERENCES schools(id)
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS courses (
+                    id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    code VARCHAR(64),
+                    department_id VARCHAR(64) NOT NULL,
+                    FOREIGN KEY (department_id) REFERENCES departments(id)
+                )
+                """
+            )
+        )
+
+        for school in schools:
+            exists = db.execute(text("SELECT 1 FROM schools WHERE id = :id"), {"id": school["id"]}).first()
+            if not exists:
+                db.execute(text("INSERT INTO schools (id, name) VALUES (:id, :name)"), school)
+
+        for department in departments:
+            exists = db.execute(text("SELECT 1 FROM departments WHERE id = :id"), {"id": department["id"]}).first()
+            if not exists:
+                db.execute(
+                    text("INSERT INTO departments (id, name, school_id) VALUES (:id, :name, :school_id)"),
+                    department,
+                )
+
+        for course in courses:
+            exists = db.execute(text("SELECT 1 FROM courses WHERE id = :id"), {"id": course["id"]}).first()
+            if not exists:
+                db.execute(
+                    text("INSERT INTO courses (id, name, code, department_id) VALUES (:id, :name, :code, :department_id)"),
+                    course,
+                )
+
+        db.commit()
+    finally:
+        db.close()
+
+
+def ensure_user_profile_columns() -> None:
+    db = SessionLocal()
+    try:
+        existing = {
+            row["name"]
+            for row in db.execute(text("PRAGMA table_info(users)")).mappings().all()
+        }
+        needed = {
+            "school_id": "VARCHAR(64)",
+            "department_id": "VARCHAR(64)",
+            "course_id": "VARCHAR(64)",
+        }
+        for column, column_type in needed.items():
+            if column not in existing:
+                db.execute(text(f"ALTER TABLE users ADD COLUMN {column} {column_type}"))
+        db.commit()
+    finally:
+        db.close()
+
+
+@app.on_event("startup")
+def bootstrap_lookups():
+    ensure_user_profile_columns()
+    ensure_lookup_tables_and_data()
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @app.post("/auth/register", response_model=schemas.Token)
 def register(data: schemas.RegisterRequest, db: Session = Depends(get_db)):
@@ -54,7 +183,12 @@ def register(data: schemas.RegisterRequest, db: Session = Depends(get_db)):
     
     user = crud.create_user(
         db, username=data.username, email=data.email, 
-        password=data.password, full_name=data.full_name, role=data.role
+        password=data.password,
+        full_name=data.full_name,
+        role=data.role,
+        school_id=data.school_id,
+        department_id=data.department_id,
+        course_id=data.course_id,
     )
     access_token, refresh_token = create_tokens(user)
     

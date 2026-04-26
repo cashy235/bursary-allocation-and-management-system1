@@ -22,9 +22,28 @@ def get_user_by_id(db: Session, user_id: int) -> User:
 def get_user_by_email(db: Session, email: str) -> User:
     return db.query(User).filter(User.email == email).first()
 
-def create_user(db: Session, username: str, email: str = None, password: str = None, full_name: str = None, role: RoleEnum = RoleEnum.student) -> User:
+def create_user(
+    db: Session,
+    username: str,
+    email: str = None,
+    password: str = None,
+    full_name: str = None,
+    role: RoleEnum = RoleEnum.student,
+    school_id: str = None,
+    department_id: str = None,
+    course_id: str = None,
+) -> User:
     hashed_pw = get_password_hash(password) if password else None
-    user = User(username=username, email=email, hashed_password=hashed_pw, full_name=full_name, role=role)
+    user = User(
+        username=username,
+        email=email,
+        hashed_password=hashed_pw,
+        full_name=full_name,
+        role=role,
+        school_id=school_id,
+        department_id=department_id,
+        course_id=course_id,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
