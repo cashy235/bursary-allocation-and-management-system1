@@ -25,6 +25,10 @@ class RegisterRequest(BaseModel):
     email: Optional[EmailStr] = None
     password: str = Field(..., min_length=6)
     full_name: Optional[str] = None
+    role: RoleEnum = RoleEnum.student
+    school_id: Optional[str] = None
+    department_id: Optional[str] = None
+    course_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -346,3 +350,21 @@ class ReportParams(BaseModel):
 class ErrorResponse(BaseModel):
     detail: str
     code: Optional[str] = None
+
+
+class SchoolOut(BaseModel):
+    id: str
+    name: str
+
+
+class DepartmentOut(BaseModel):
+    id: str
+    name: str
+    school_id: str
+
+
+class CourseOut(BaseModel):
+    id: str
+    name: str
+    code: Optional[str] = None
+    department_id: str

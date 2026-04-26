@@ -60,6 +60,24 @@ export interface Token {
   token_type: string;
 }
 
+export interface School {
+  id: string;
+  name: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  school_id: string;
+}
+
+export interface Course {
+  id: string;
+  name: string;
+  code?: string;
+  department_id: string;
+}
+
 export interface Document {
   id: number;
   application_id: number;
@@ -192,8 +210,32 @@ export interface AuditLog {
 }
 
 // Auth
-export const register = (username: string, email: string, password: string, fullName?: string) =>
-  api.post<Token>("/auth/register", { username, email: email || undefined, password, full_name: fullName || undefined }).then(r => r.data);
+export const register = (
+  username: string,
+  email: string,
+  password: string,
+  fullName?: string,
+  role?: Role,
+  schoolId?: string,
+  departmentId?: string,
+  courseId?: string
+) =>
+  api.post<Token>("/auth/register", {
+    username,
+    email: email || undefined,
+    password,
+    full_name: fullName || undefined,
+    role: role || "student",
+    school_id: schoolId || undefined,
+    department_id: departmentId || undefined,
+    course_id: courseId || undefined,
+  }).then(r => r.data);
+
+export const getSchools = () => api.get<School[]>("/lookups/schools").then(r => r.data);
+export const getDepartments = (schoolId?: string) =>
+  api.get<Department[]>("/lookups/departments", { params: schoolId ? { school_id: schoolId } : undefined }).then(r => r.data);
+export const getCourses = (departmentId?: string) =>
+  api.get<Course[]>("/lookups/courses", { params: departmentId ? { department_id: departmentId } : undefined }).then(r => r.data);
 
 export const login = (username: string, password: string) =>
   api.post<Token>("/auth/login", { username, password }).then(r => r.data);

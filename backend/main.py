@@ -2,7 +2,9 @@ from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Que
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import Optional, List
 from datetime import datetime
 import os, shutil, uuid, io
@@ -52,13 +54,56 @@ def register(data: schemas.RegisterRequest, db: Session = Depends(get_db)):
     
     user = crud.create_user(
         db, username=data.username, email=data.email, 
-        password=data.password, full_name=data.full_name
+        password=data.password, full_name=data.full_name, role=data.role
     )
     access_token, refresh_token = create_tokens(user)
     
-    crud.audit_log_action(db, user.id, "register", "user", user.id, f"New user registered: {user.username}")
+    selection_bits = [data.school_id, data.department_id, data.course_id]
+    selection = ", ".join([v for v in selection_bits if v]) if any(selection_bits) else "none"
+    crud.audit_log_action(
+        db,
+        user.id,
+        "register",
+        "user",
+        user.id,
+        f"New user registered: {user.username} (role: {user.role.value}, profile: {selection})",
+    )
     
     return schemas.Token(access_token=access_token, refresh_token=refresh_token)
+
+
+@app.get("/lookups/schools", response_model=List[schemas.SchoolOut])
+def list_schools(db: Session = Depends(get_db)):
+    rows = db.execute(text("SELECT id, name FROM schools ORDER BY name")).mappings().all()
+    return [schemas.SchoolOut(id=row["id"], name=row["name"]) for row in rows]
+
+
+@app.get("/lookups/departments", response_model=List[schemas.DepartmentOut])
+def list_departments(school_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if school_id:
+        query = text("SELECT id, name, school_id FROM departments WHERE school_id = :school_id ORDER BY name")
+        rows = db.execute(query, {"school_id": school_id}).mappings().all()
+    else:
+        rows = db.execute(text("SELECT id, name, school_id FROM departments ORDER BY name")).mappings().all()
+    return [schemas.DepartmentOut(id=row["id"], name=row["name"], school_id=row["school_id"]) for row in rows]
+
+
+@app.get("/lookups/courses", response_model=List[schemas.CourseOut])
+def list_courses(department_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if department_id:
+        query = text("SELECT id, name, code, department_id FROM courses WHERE department_id = :department_id ORDER BY name")
+        rows = db.execute(query, {"department_id": department_id}).mappings().all()
+    else:
+        rows = db.execute(text("SELECT id, name, code, department_id FROM courses ORDER BY name")).mappings().all()
+    return [
+        schemas.CourseOut(
+            id=row["id"],
+            name=row["name"],
+            code=row.get("code"),
+            department_id=row["department_id"],
+        )
+        for row in rows
+    ]
 
 
 @app.post("/auth/login", response_model=schemas.Token)
@@ -135,7 +180,7 @@ def list_users(
     total_pages = (total + page_size - 1) // page_size
     users = query.offset((page - 1) * page_size).limit(page_size).all()
     return {
-        "items": users,
+        "items": [schemas.UserOut.model_validate(u) for u in users],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -163,17 +208,19 @@ def list_applications(
     status: Optional[ApplicationStatus] = Query(None),
     institution: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     is_student = current_user.role == RoleEnum.student
     effective_user_id = user_id if not is_student else current_user.id
     
-    items, total, total_pages = crud.get_applications(db, effective_user_id, status.value if status else None, institution, page, page_size)
+    items, total, total_pages = crud.get_applications(
+        db, effective_user_id, status.value if status else None, institution, page, page_size
+    )
     
     return {
-        "items": items,
+        "items": [schemas.ApplicationOut.model_validate(a) for a in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -184,13 +231,13 @@ def list_applications(
 @app.get("/applications/my", response_model=dict)
 def my_applications(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     items, total, total_pages = crud.get_applications(db, current_user.id, None, None, page, page_size)
     return {
-        "items": items,
+        "items": [schemas.ApplicationOut.model_validate(a) for a in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -308,7 +355,7 @@ def list_awards(
 ):
     items, total, total_pages = crud.get_awards(db, page, page_size)
     return {
-        "items": items,
+        "items": [schemas.AwardOut.model_validate(a) for a in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -333,7 +380,7 @@ def list_disbursements(
 ):
     items, total, total_pages = crud.get_disbursements(db, award_id, status, page, page_size)
     return {
-        "items": items,
+        "items": [schemas.DisbursementOut.model_validate(d) for d in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -360,7 +407,10 @@ def set_budget(data: schemas.BudgetUpdate, db: Session = Depends(get_db), admin 
 # ── Dashboard & Stats ────────────────────────────────────────────────────────
 @app.get("/admin/stats", response_model=schemas.DashboardStats)
 def dashboard_stats(db: Session = Depends(get_db), admin = Depends(require_admin)):
-    return crud.get_dashboard_stats(db)
+    data = crud.get_dashboard_stats(db)
+    # Ensure recent_applications is schema-serializable
+    data["recent_applications"] = [schemas.ApplicationListOut.model_validate(a) for a in data.get("recent_applications", [])]
+    return jsonable_encoder(data)
 
 
 # ── Audit Logs ────────────────────────────────────────────────────────────────
@@ -375,7 +425,7 @@ def audit_logs(
 ):
     items, total, total_pages = crud.get_audit_logs(db, user_id, entity_type, page, page_size)
     return {
-        "items": items,
+        "items": [schemas.AuditLogOut.model_validate(l) for l in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -391,7 +441,7 @@ def report_summary(
     status: Optional[ApplicationStatus] = Query(None),
     institution: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    auditor = Depends(require_auditor)
 ):
     return crud.generate_report(db, start_date, end_date, status, institution)
 
@@ -402,7 +452,7 @@ def export_csv(
     end_date: Optional[datetime] = Query(None),
     status: Optional[ApplicationStatus] = Query(None),
     db: Session = Depends(get_db),
-    admin = Depends(require_admin)
+    auditor = Depends(require_auditor)
 ):
     csv_data = crud.export_applications_csv(db, start_date, end_date, status)
     return StreamingResponse(

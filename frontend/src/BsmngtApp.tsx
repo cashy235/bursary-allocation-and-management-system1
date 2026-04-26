@@ -5,14 +5,21 @@ import {
   type ApplicationStatus,
   type AuditLog,
   type Budget,
+  type Course,
+  type Department,
   type Role,
+  type School,
   type User,
   createAward,
+  createDecision,
   createApplication,
+  getCourses,
+  getDepartments,
   getApplications,
   getAuditLogs,
   getBudget,
   getCurrentUser,
+  getSchools,
   getReport,
   login,
   register,
@@ -388,15 +395,78 @@ function AuthScreen({ onLoggedIn }: { onLoggedIn: (u: User) => void }) {
   const [isReg, setIsReg] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("student");
+  const [schools, setSchools] = useState<School[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [schoolId, setSchoolId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [courseId, setCourseId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isReg || role !== "student") return;
+    getSchools()
+      .then(setSchools)
+      .catch(() => setSchools([]));
+  }, [isReg, role]);
+
+  useEffect(() => {
+    if (!isReg || role !== "student" || !schoolId) {
+      setDepartments([]);
+      setDepartmentId("");
+      setCourses([]);
+      setCourseId("");
+      return;
+    }
+    getDepartments(schoolId)
+      .then((items) => {
+        setDepartments(items);
+        setDepartmentId("");
+        setCourses([]);
+        setCourseId("");
+      })
+      .catch(() => {
+        setDepartments([]);
+        setDepartmentId("");
+      });
+  }, [isReg, role, schoolId]);
+
+  useEffect(() => {
+    if (!isReg || role !== "student" || !departmentId) {
+      setCourses([]);
+      setCourseId("");
+      return;
+    }
+    getCourses(departmentId)
+      .then((items) => {
+        setCourses(items);
+        setCourseId("");
+      })
+      .catch(() => {
+        setCourses([]);
+        setCourseId("");
+      });
+  }, [isReg, role, departmentId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const tokens = isReg ? await register(username, email, password, fullName || undefined) : await login(username, password);
+      const tokens = isReg
+        ? await register(
+            username,
+            email,
+            password,
+            fullName || undefined,
+            role,
+            role === "student" ? schoolId || undefined : undefined,
+            role === "student" ? departmentId || undefined : undefined,
+            role === "student" ? courseId || undefined : undefined
+          )
+        : await login(username, password);
       localStorage.setItem("access_token", tokens.access_token);
       localStorage.setItem("refresh_token", tokens.refresh_token);
       const u = await getCurrentUser();
@@ -443,6 +513,63 @@ function AuthScreen({ onLoggedIn }: { onLoggedIn: (u: User) => void }) {
           <form onSubmit={handleSubmit}>
             {isReg && <Input label="Full Name" value={fullName} onChange={setFullName} placeholder="John Doe" required />}
             {isReg && <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" required />}
+            {isReg && (
+              <Select
+                label="Role"
+                value={role}
+                onChange={(v) => {
+                  const next = v as Role;
+                  setRole(next);
+                  if (next !== "student") {
+                    setSchoolId("");
+                    setDepartmentId("");
+                    setCourseId("");
+                    setSchools([]);
+                    setDepartments([]);
+                    setCourses([]);
+                  }
+                }}
+                options={[
+                  { value: "student", label: "Student / Applicant" },
+                  { value: "admin", label: "Admin" },
+                  { value: "committee", label: "Committee" },
+                  { value: "auditor", label: "Auditor" },
+                ]}
+              />
+            )}
+            {isReg && role === "student" && (
+              <Select
+                label="School"
+                value={schoolId}
+                onChange={setSchoolId}
+                options={[
+                  { value: "", label: schools.length ? "Select school" : "No schools found" },
+                  ...schools.map((s) => ({ value: s.id, label: s.name })),
+                ]}
+              />
+            )}
+            {isReg && role === "student" && (
+              <Select
+                label="Department"
+                value={departmentId}
+                onChange={setDepartmentId}
+                options={[
+                  { value: "", label: schoolId ? (departments.length ? "Select department" : "No departments found") : "Select school first" },
+                  ...departments.map((d) => ({ value: d.id, label: d.name })),
+                ]}
+              />
+            )}
+            {isReg && role === "student" && (
+              <Select
+                label="Course"
+                value={courseId}
+                onChange={setCourseId}
+                options={[
+                  { value: "", label: departmentId ? (courses.length ? "Select course" : "No courses found") : "Select department first" },
+                  ...courses.map((c) => ({ value: c.id, label: c.code ? `${c.name} (${c.code})` : c.name })),
+                ]}
+              />
+            )}
             <Input label="Username" value={username} onChange={setUsername} placeholder="Enter your username" required />
             <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="Enter your password" required />
             {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#dc2626", marginBottom: 16 }}>{error}</div>}
@@ -709,6 +836,13 @@ function AppDetail({ app, user, onBack, onSave, onAward }: { app: Application; u
   const canEdit = ["admin", "committee"].includes(user.role);
   const canAward = ["admin", "finance"].includes(user.role);
 
+  useEffect(() => {
+    setStatus(app.status);
+    setNotes(app.notes || "");
+    setMsg("");
+    setAwardAmount("");
+  }, [app.id, app.status, app.notes]);
+
   const handleSave = async () => {
     setSaving(true);
     setMsg("");
@@ -958,6 +1092,157 @@ function AdminDashboard({ apps, budget, onNav }: { apps: Application[]; budget: 
   );
 }
 
+function CommitteeDashboard({
+  apps,
+  onNav,
+  onRecommend,
+}: {
+  apps: Application[];
+  onNav: (v: View, id?: number) => void;
+  onRecommend: (appId: number, decision: "approve" | "reject", amount?: number, notes?: string) => Promise<void>;
+}) {
+  const queue = useMemo(
+    () =>
+      apps.filter((a) =>
+        ["submitted", "under_review", "documents_verified", "pending_decision"].includes(a.status)
+      ),
+    [apps]
+  );
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [decision, setDecision] = useState<"approve" | "reject">("approve");
+  const [amount, setAmount] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!queue.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !queue.some((a) => a.id === selectedId)) {
+      setSelectedId(queue[0].id);
+    }
+  }, [queue, selectedId]);
+
+  const selected = selectedId ? queue.find((a) => a.id === selectedId) || null : null;
+
+  const stats = useMemo(
+    () => ({
+      queue: queue.length,
+      needsVerification: queue.filter((a) => ["submitted", "under_review"].includes(a.status)).length,
+      pendingDecision: queue.filter((a) => ["documents_verified", "pending_decision"].includes(a.status)).length,
+    }),
+    [queue]
+  );
+
+  const handleRecommend = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await onRecommend(
+        selected.id,
+        decision,
+        decision === "approve" && amount ? Number(amount) : undefined,
+        notes || undefined
+      );
+      setAmount("");
+      setNotes("");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 32, maxWidth: 1100, margin: "0 auto" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: 30, margin: "0 0 6px", color: "#111827" }}>Committee Review Board</h1>
+        <p style={{ color: "#6b7280", margin: 0 }}>Review verified applicants and submit committee recommendations.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
+        <StatCard label="In Queue" value={stats.queue} accent="#0284c7" />
+        <StatCard label="Needs Initial Review" value={stats.needsVerification} accent="#d97706" />
+        <StatCard label="Ready for Decision" value={stats.pendingDecision} accent="#7c3aed" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 18 }}>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb" }}>
+            <h3 style={{ margin: 0, fontSize: 16, color: "#111827" }}>Committee Queue</h3>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
+                {["#", "Applicant", "Status", "Income", "Action"].map((h) => (
+                  <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 11, color: "#6b7280", textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((app) => (
+                <tr key={app.id} style={{ borderBottom: "1px solid #f3f4f6", background: selectedId === app.id ? "#eff6ff" : "#fff" }}>
+                  <td style={{ padding: "12px 14px", color: "#9ca3af" }}>#{app.id}</td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <p style={{ margin: 0, fontWeight: 600, color: "#111827" }}>{app.full_name}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: "#6b7280" }}>{app.course}</p>
+                  </td>
+                  <td style={{ padding: "12px 14px" }}><Badge status={app.status} /></td>
+                  <td style={{ padding: "12px 14px", color: "#374151" }}>{fmt(app.annual_income)}</td>
+                  <td style={{ padding: "12px 14px", display: "flex", gap: 8 }}>
+                    <Btn size="sm" variant="secondary" onClick={() => setSelectedId(app.id)}>Select</Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => onNav("app_detail", app.id)}>Details</Btn>
+                  </td>
+                </tr>
+              ))}
+              {queue.length === 0 && (
+                <tr><td colSpan={5} style={{ padding: 36, textAlign: "center", color: "#9ca3af" }}>No applications currently in committee queue.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+
+        <Card>
+          <h3 style={{ margin: "0 0 14px", fontFamily: "'Instrument Serif', serif", fontSize: 20, color: "#111827" }}>Recommendation</h3>
+          {!selected ? (
+            <p style={{ margin: 0, color: "#6b7280" }}>Select an application from the queue to submit a recommendation.</p>
+          ) : (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ margin: "0 0 4px", fontSize: 12, color: "#6b7280" }}>Selected Applicant</p>
+                <p style={{ margin: 0, fontWeight: 700, color: "#111827" }}>{selected.full_name}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6b7280" }}>{selected.institution}</p>
+              </div>
+              <Select
+                label="Decision"
+                value={decision}
+                onChange={(v) => setDecision(v as "approve" | "reject")}
+                options={[
+                  { value: "approve", label: "Approve" },
+                  { value: "reject", label: "Reject" },
+                ]}
+              />
+              {decision === "approve" && (
+                <Input
+                  label="Recommended Amount (KES)"
+                  type="number"
+                  value={amount}
+                  onChange={setAmount}
+                  placeholder="e.g. 65000"
+                />
+              )}
+              <Input label="Committee Notes" value={notes} onChange={setNotes} rows={4} placeholder="Reasoning for this recommendation..." />
+              <Btn onClick={() => void handleRecommend()} disabled={saving || (decision === "approve" && !amount)}>
+                {saving ? "Submitting…" : "Submit Recommendation"}
+              </Btn>
+            </>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function FinanceDashboard({ budget, awards, onSaveBudget }: { budget: Budget | null; awards: Application[]; onSaveBudget: (academicYear: string, total: number) => Promise<void> }) {
   const [showModal, setShowModal] = useState(false);
   const [year, setYear] = useState(budget?.academic_year || "");
@@ -1139,6 +1424,8 @@ export default function BsmngtApp() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [report, setReportState] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -1147,7 +1434,7 @@ export default function BsmngtApp() {
 
   const loadCore = async (u: User) => {
     const [appsRes, bud] = await Promise.all([
-      getApplications({ page_size: 200 }),
+      getApplications({ page_size: 100 }),
       getBudget().catch(() => null),
     ]);
     setApps(appsRes.items);
@@ -1212,8 +1499,14 @@ export default function BsmngtApp() {
   };
 
   const reloadApps = async () => {
-    const res = await getApplications({ page_size: 200 });
-    setApps(res.items);
+    setSyncing(true);
+    try {
+      const res = await getApplications({ page_size: 100 });
+      setApps(res.items);
+      setLastSyncedAt(new Date());
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const onSaveApp = async (id: number, updates: Partial<Application>) => {
@@ -1223,7 +1516,9 @@ export default function BsmngtApp() {
   };
 
   const onCreateApp = async (created: Application) => {
+    // Optimistic update then sync to ensure admin views reflect immediately.
     setApps((prev) => [created, ...prev]);
+    void reloadApps();
     showToast("Application submitted successfully!");
     setView("student_dash");
   };
@@ -1236,6 +1531,23 @@ export default function BsmngtApp() {
     });
     await reloadApps();
     showToast("Award created.");
+  };
+
+  const onCommitteeRecommend = async (
+    appId: number,
+    decision: "approve" | "reject",
+    amount?: number,
+    notes?: string
+  ) => {
+    await createDecision(appId, {
+      decision,
+      amount_recommended: amount,
+      tuition_amount: amount ? Math.round(amount * 0.75) : undefined,
+      upkeep_amount: amount ? Math.round(amount * 0.25) : undefined,
+      notes,
+    });
+    await reloadApps();
+    showToast("Committee recommendation submitted.");
   };
 
   const onSaveBudget = async (academicYear: string, total: number) => {
@@ -1255,7 +1567,7 @@ export default function BsmngtApp() {
 
     if (view === "student_dash") return <StudentDashboard user={user} apps={apps} onNav={navTo} />;
     if (view === "admin_dash" || view === "admin_apps") return <AdminDashboard apps={apps} budget={budget} onNav={navTo} />;
-    if (view === "committee_dash") return <AdminDashboard apps={apps.filter((a) => ["submitted", "under_review", "pending_decision", "documents_verified"].includes(a.status))} budget={budget} onNav={navTo} />;
+    if (view === "committee_dash") return <CommitteeDashboard apps={apps} onNav={navTo} onRecommend={onCommitteeRecommend} />;
     if (view === "finance_dash" || view === "budget") return <FinanceDashboard budget={budget} awards={apps.filter((a) => !!a.award)} onSaveBudget={onSaveBudget} />;
     if (view === "audit_dash" || view === "reports") return <AuditorDashboard logs={auditLogs} report={report} />;
     return <StudentDashboard user={user} apps={apps} onNav={navTo} />;
@@ -1264,7 +1576,19 @@ export default function BsmngtApp() {
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-      <TopNav user={user} onLogout={handleLogout} onNav={(v) => navTo(v)} />
+      <TopNav user={user} onLogout={handleLogout} onNav={(v) => { navTo(v); void reloadApps(); }} />
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "10px 32px 0" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>
+          {lastSyncedAt && (
+            <span style={{ fontSize: 12, color: "#6b7280" }}>
+              Last updated {lastSyncedAt.toLocaleTimeString()}
+            </span>
+          )}
+          <Btn variant="secondary" size="sm" onClick={() => void reloadApps()} disabled={syncing}>
+            {syncing ? "Refreshing…" : "Refresh"}
+          </Btn>
+        </div>
+      </div>
       <main>{main}</main>
       {toast && (
         <div style={{ position: "fixed", bottom: 32, right: 32, background: toast.type === "success" ? "#059669" : "#dc2626", color: "#fff", padding: "14px 22px", borderRadius: 12, fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", zIndex: 1000 }}>

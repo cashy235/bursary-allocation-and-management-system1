@@ -4,17 +4,39 @@ from typing import Optional
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
 import models
 import bcrypt
+import hashlib
+
+
+def _normalized_password_bytes(password: str) -> bytes:
+    # Hash to fixed-length bytes so bcrypt never receives >72 bytes.
+    return hashlib.sha256(password.encode("utf-8")).hexdigest().encode("ascii")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password:
+        return False
+    hashed = hashed_password.encode("utf-8")
+    raw_bytes = plain_password.encode("utf-8")
+    candidates = (
+        _normalized_password_bytes(plain_password),  # new format
+        raw_bytes,                                   # legacy format (if <=72 bytes)
+        raw_bytes[:72],                              # legacy fallback
+    )
     try:
-        return bcrypt.checkpw(plain_password[:72].encode("utf-8"), hashed_password.encode("utf-8"))
+        for candidate in candidates:
+            try:
+                if bcrypt.checkpw(candidate, hashed):
+                    return True
+            except ValueError:
+                # Triggered by bcrypt's 72-byte limit for legacy plaintext input.
+                continue
+        return False
     except Exception:
         return False
 
 
 def get_password_hash(password: str) -> str:
-    hashed = bcrypt.hashpw(password[:72].encode("utf-8"), bcrypt.gensalt())
+    hashed = bcrypt.hashpw(_normalized_password_bytes(password), bcrypt.gensalt())
     return hashed.decode("utf-8")
 
 

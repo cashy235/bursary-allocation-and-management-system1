@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { login, register, getCurrentUser } from "../api";
+import { login, register, getCurrentUser, type Role } from "../api";
 import { useAuth } from "../AuthContext";
 
 export default function Login() {
@@ -10,6 +10,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<Role>("student");
   const [error, setError] = useState("");
   const { setUser } = useAuth();
   const nav = useNavigate();
@@ -26,7 +27,7 @@ export default function Login() {
     e.preventDefault();
     try {
       if (isRegister) {
-        const data = await register(username, email, password, fullName || undefined);
+        const data = await register(username, email, password, fullName || undefined, role);
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem("refresh_token", data.refresh_token);
         const user = await getCurrentUser();
@@ -83,6 +84,16 @@ export default function Login() {
           />
           {isRegister && (
             <>
+              <select
+                className="input"
+                value={role}
+                onChange={(e) => setRole(e.target.value as Role)}
+              >
+                <option value="student">Student / Applicant</option>
+                <option value="admin">Admin</option>
+                <option value="committee">Committee</option>
+                <option value="auditor">Auditor</option>
+              </select>
               <input
                 className="input"
                 type="email"
