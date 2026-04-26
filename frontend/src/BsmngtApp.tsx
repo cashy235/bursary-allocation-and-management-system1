@@ -52,6 +52,14 @@ function getProgress(status: ApplicationStatus) {
 const fmt = (n: unknown) => `KES ${Number(n ?? 0).toLocaleString()}`;
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
+const fileUrl = (path: string) => {
+  if (!path) return "#";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const normalized = path.replace(/\\/g, "/");
+  const filename = normalized.split("/").pop();
+  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  return filename ? `${baseUrl}/uploads/${filename}` : "#";
+};
 
 function Badge({ status }: { status: string }) {
   const m = STATUS_META[status] || { label: status, color: "#6b7280", bg: "#f9fafb" };
@@ -980,6 +988,54 @@ function AppDetail({ app, user, onBack, onSave, onAward }: { app: Application; u
       <Card style={{ marginBottom: 20 }}>
         <h3 style={{ fontFamily: "'Instrument Serif', serif", margin: "0 0 12px", fontSize: 16, color: "#374151" }}>Personal Statement</h3>
         <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.8, margin: 0 }}>{app.reason}</p>
+      </Card>
+
+      <Card style={{ marginBottom: 20 }}>
+        <h3 style={{ fontFamily: "'Instrument Serif', serif", margin: "0 0 16px", fontSize: 16, color: "#374151" }}>Uploaded Documents</h3>
+        {!app.documents?.length ? (
+          <p style={{ margin: 0, color: "#9ca3af", fontSize: 13 }}>No documents uploaded yet.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {app.documents.map((doc) => (
+              <div
+                key={doc.id}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "#111827" }}>
+                    {doc.doc_type.replace("_", " ").toUpperCase()}
+                  </p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6b7280" }}>{doc.original_filename}</p>
+                </div>
+                <a
+                  href={fileUrl(doc.file_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    fontSize: 12,
+                    textDecoration: "none",
+                    color: "#1e40af",
+                    fontWeight: 600,
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    background: "#eff6ff",
+                  }}
+                >
+                  View
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {app.award && (
