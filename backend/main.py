@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy import inspect
 from typing import Optional, List
 from datetime import datetime
 import os, shutil, uuid, io
@@ -146,10 +147,7 @@ def ensure_lookup_tables_and_data() -> None:
 def ensure_user_profile_columns() -> None:
     db = SessionLocal()
     try:
-        existing = {
-            row["name"]
-            for row in db.execute(text("PRAGMA table_info(users)")).mappings().all()
-        }
+        existing = {col["name"] for col in inspect(engine).get_columns("users")}
         needed = {
             "school_id": "VARCHAR(64)",
             "department_id": "VARCHAR(64)",
