@@ -14,7 +14,8 @@ export default function AdminReview() {
   const [app, setApp] = useState<Application | null>(null);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<ApplicationStatus>("submitted");
-  const [amount, setAmount] = useState("");
+  const [tuitionAmount, setTuitionAmount] = useState("");
+  const [upkeepAmount, setUpkeepAmount] = useState("");
   const [msg, setMsg] = useState("");
 
   const load = () => getApplication(+id!).then(a => {
@@ -31,10 +32,13 @@ export default function AdminReview() {
 
   const handleAllocate = async () => {
     try {
+      const tuition = +tuitionAmount || 0;
+      const upkeep = +upkeepAmount || 0;
+      const total = tuition + upkeep;
       await createAward(+id!, {
-        total_amount: +amount,
-        tuition_amount: Math.round(+amount * 0.75),
-        upkeep_amount: Math.round(+amount * 0.25),
+        total_amount: total,
+        tuition_amount: tuition,
+        upkeep_amount: upkeep,
       });
       setMsg("Funds allocated!");
       load();
@@ -111,13 +115,38 @@ export default function AdminReview() {
             <div className="border-t pt-4 mt-4 space-y-3">
               <h3 className="font-semibold text-gray-700">Allocate Funds</h3>
               {app.award && (
-                <p className="text-sm text-green-600">Currently awarded: KES {app.award.total_amount.toLocaleString()}</p>
+                <div className="text-sm text-green-600 space-y-1">
+                  <p>Currently awarded (total): KES {app.award.total_amount.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">
+                    Institution fee: KES {app.award.tuition_amount.toLocaleString()} · Upkeep: KES {app.award.upkeep_amount.toLocaleString()}
+                  </p>
+                </div>
               )}
-              <div className="flex gap-3">
-                <input className="input flex-1" type="number" placeholder="Amount (KES)"
-                  value={amount} onChange={e => setAmount(e.target.value)} />
-                <button className="btn-success" onClick={handleAllocate}>Award</button>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  placeholder="Institution fee (KES)"
+                  value={tuitionAmount}
+                  onChange={e => setTuitionAmount(e.target.value)}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  placeholder="Upkeep (KES)"
+                  value={upkeepAmount}
+                  onChange={e => setUpkeepAmount(e.target.value)}
+                />
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm flex items-center justify-between">
+                  <span className="text-gray-500">Total</span>
+                  <span className="font-semibold text-gray-800">
+                    KES {((+tuitionAmount || 0) + (+upkeepAmount || 0)).toLocaleString()}
+                  </span>
+                </div>
               </div>
+              <button className="btn-success" onClick={handleAllocate}>Award</button>
             </div>
           )}
 

@@ -306,6 +306,16 @@ def create_award(db: Session, app_id: int, user_id: int, data: AwardCreate) -> A
     app = get_application(db, app_id)
     if app.status != ApplicationStatus.approved:
         raise HTTPException(status_code=400, detail="Application must be approved before awarding")
+
+    if data.total_amount < 0 or data.tuition_amount < 0 or data.upkeep_amount < 0:
+        raise HTTPException(status_code=400, detail="Award amounts must be non-negative")
+
+    # Enforce split integrity: institution fee (tuition) + upkeep must equal total.
+    if round((data.tuition_amount + data.upkeep_amount) - data.total_amount, 2) != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Tuition amount + upkeep amount must equal total amount",
+        )
     
     budget = get_budget(db)
     remaining = budget.total_amount - budget.allocated_amount
