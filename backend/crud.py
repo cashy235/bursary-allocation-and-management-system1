@@ -5,6 +5,8 @@ from schemas import ApplicationCreate, ApplicationUpdate, DocumentCreate, Docume
 from auth import get_password_hash
 from fastapi import HTTPException
 from datetime import datetime
+from email_utils import send_email
+from sms_utils import send_sms
 
 
 def audit_log_action(db: Session, user_id: int, action: str, entity_type: str, entity_id: int = None, details: str = None):
@@ -247,8 +249,50 @@ def finalize_decision(db: Session, app_id: int, admin_id: int) -> Application:
     
     if approve_count > reject_count:
         app.status = ApplicationStatus.approved
+        # Send approval email
+        subject = "Bursary Application Approved"
+        body = f"""Dear {app.full_name},
+
+Congratulations! Your bursary application has been approved by the committee.
+
+Application Details:
+- Application ID: {app.id}
+- Institution: {app.institution}
+- Course: {app.course}
+- Year of Study: {app.year_of_study}
+
+Next steps will be communicated to you regarding the disbursement of funds.
+
+Best regards,
+Bursary Management System"""
+        send_email(app.email, subject, body)
+        # Send approval SMS
+        if app.phone:
+            sms_message = f"Congratulations! Your bursary application (ID: {app.id}) has been approved. Check your email for details."
+            send_sms(app.phone, sms_message)
     elif reject_count > approve_count:
         app.status = ApplicationStatus.rejected
+        # Send rejection email
+        subject = "Bursary Application Update"
+        body = f"""Dear {app.full_name},
+
+Thank you for applying for the bursary. After careful review, the committee has decided not to approve your application at this time.
+
+Application Details:
+- Application ID: {app.id}
+- Institution: {app.institution}
+- Course: {app.course}
+- Year of Study: {app.year_of_study}
+
+You may reapply in the next application cycle if your circumstances change.
+
+Best regards,
+Bursary Management System"""
+        send_email(app.email, subject, body)
+        # Send rejection SMS
+        if app.phone:
+            sms_message = f"Thank you for applying for the bursary (ID: {app.id}). After review, we cannot approve your application at this time. You may reapply in the next cycle."
+            send_sms(app.phone, sms_message)
     else:
         app.status = ApplicationStatus.pending_decision
     
